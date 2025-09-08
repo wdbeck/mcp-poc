@@ -33,3 +33,7 @@ outputType = "console"
 localPort = 8000
 externalPort = 8000
 exposeLocalhost = true
+
+[deployment]
+deploymentTarget = "vm"
+run = ["python", "mcp-poc-server.py"]
