@@ -22,7 +22,7 @@ PINECONE_NAMESPACE_FALLBACK = os.environ.get("PINECONE_NAMESPACE", "").strip()
 # New: allowed companies config (comma-separated "id:name" pairs)
 # Example: PINECONE_ALLOWED_COMPANIES="113:Acme Corp,200:Beta Inc"
 PINECONE_ALLOWED_COMPANIES="113:QATC"
-_ALLOWED = os.environ.get("PINECONE_ALLOWED_COMPANIES", "").strip()
+_ALLOWED = os.environ.get("PINECONE_ALLOWED_COMPANIES", PINECONE_ALLOWED_COMPANIES).strip()
 
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "text-embedding-3-large")  # 3072-dim
 INDEX_DIM = int(os.environ.get("INDEX_DIM", "3072"))  # must match your index
