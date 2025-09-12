@@ -42,7 +42,7 @@ def create_server():
     mcp = FastMCP(name="Discovered Pinecone MCP", instructions=server_instructions, stateless_http=True)
 
     @mcp.tool()
-    async def search(query: str, top_k: int = 10, resource_type: str = "") -> Dict[str, List[Dict[str, Any]]]:
+    async def search(query: str, top_k: int = 100, resource_type: str = "") -> Dict[str, List[Dict[str, Any]]]:
         """
         Semantic search over Pinecone.
 
