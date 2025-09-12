@@ -34,6 +34,10 @@ localPort = 8000
 externalPort = 8000
 exposeLocalhost = true
 
+[[ports]]
+localPort = 46037
+externalPort = 80
+
 [deployment]
 deploymentTarget = "vm"
 run = ["python", "mcp-poc-server.py"]
