@@ -27,12 +27,15 @@ This is a FastMCP (Model Context Protocol) server that provides semantic search 
 - **Main Server**: `mcp-poc-server.py` - FastMCP server with Pinecone integration
 - **Dependencies**: fastmcp, openai, pinecone-client
 - **Environment**: 
-  - OPENAI_API_KEY: For generating query embeddings
-  - PINECONE_API_KEY: For vector database access
-  - PINECONE_INDEX: poc-discovered-data-query (default)
-  - PINECONE_NAMESPACE: poc (default)
-  - EMBED_MODEL: text-embedding-3-large (default)
-  - INDEX_DIM: 3072 (default)
+  - **Required API Keys** (from Replit Secrets):
+    - OPENAI_API_KEY: For generating query embeddings
+    - PINECONE_API_KEY: For vector database access
+  - **Configuration** (defaults used if not set):
+    - PINECONE_INDEX: poc-discovered-data-query (default)
+    - PINECONE_NAMESPACE: poc (default)
+    - EMBED_MODEL: text-embedding-3-large (default)
+    - INDEX_DIM: 3072 (default)
+  - **Key Rotation**: To update API keys, modify Replit Secrets and restart the MCP Server workflow
 
 ## Server Features
 - **Search Tool**: Semantic search over Pinecone with optional resource type filtering
