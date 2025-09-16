@@ -404,6 +404,10 @@ def create_server():
                 "candidate_id": meta.get("company_jobposting_candidate_id"),
             })
 
+        logger.info("Query ns=%s filter=%s top_k=%s", ns, pine_filter, top_k)
+        matches = res.get("matches", [])
+        logger.info("ns=%s returned %d matches (pre-merge)", ns, len(matches))
+        all_matches.extend(matches)
         logger.info(f"Pinecone search merged {len(all_matches)} matches -> {len(out)} results")
         return {"results": out}
 
