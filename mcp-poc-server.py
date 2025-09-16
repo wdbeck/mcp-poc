@@ -245,7 +245,7 @@ def _company_filter_for(cid: int, base_filter: Dict[str, Any] | None) -> Dict[st
     f = dict(base_filter or {})
     # Admin or "all jobs" -> no job restriction
     if scope.role == "admin" or scope.all_jobs:
-        return f or None
+        return f
 
     # Restrict to allowed job ids
     job_ids = scope.job_ids
