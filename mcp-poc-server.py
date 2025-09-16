@@ -330,7 +330,7 @@ def create_server():
 
     @mcp.tool()
     async def search(query: str,
-                     top_k: int = 20,
+                     top_k: int = 100,
                      resource_type: str = "",
                      company_id: int | None = None,
                      company_name: str | None = None) -> Dict[str, List[Dict[str, Any]]]:
