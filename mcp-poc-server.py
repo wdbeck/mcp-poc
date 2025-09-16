@@ -18,12 +18,9 @@ export PINECONE_ALLOWED_COMPANIES="113:QATC"
 export DISCOVERED_ACCESS_PROFILE='{
   "user_id": "weston",
   "companies": {
-    "113": { "role": "viewer", "all_jobs": false, "job_ids": [1001, 1002] }
+    "113": { "role": "viewer", "all_jobs": false, "job_ids": [3413] }
   }
 }'
-
-# (Optional) legacy single-namespace mode if you don't use company-based namespaces:
-# export PINECONE_NAMESPACE="legacy_namespace"
 
 python mcp-poc-server.py
 """
@@ -98,7 +95,7 @@ def load_access_profile() -> AccessProfile:
       {
         "user_id": "weston",
         "companies": {
-          "113": { "role": "viewer", "all_jobs": false, "job_ids": [1001, 1002] }
+          "113": { "role": "viewer", "all_jobs": false, "job_ids": [3413] }
         }
       }
     """
@@ -243,7 +240,7 @@ def _company_filter_for(cid: int, base_filter: Dict[str, Any] | None) -> Dict[st
         return None  # no access
 
     f = dict(base_filter or {})
-    # Admin or "all jobs" -> no job restriction
+    # Admin or "all jobs" -> allow with whatever base filter we have ({} means no filter)
     if scope.role == "admin" or scope.all_jobs:
         return f
 
@@ -253,7 +250,13 @@ def _company_filter_for(cid: int, base_filter: Dict[str, Any] | None) -> Dict[st
         # Has company-level entry but zero jobs -> produce no results
         return {"company_jobposting_id": {"$in": []}}
 
-    job_clause = {"company_jobposting_id": {"$in": sorted(map(int, job_ids))}}
+    # Match ints or strings to tolerate type drift in stored metadata
+    ids_int = sorted({int(j) for j in job_ids})
+    ids_str = [str(j) for j in ids_int]
+    job_clause = {"$or": [
+        {"company_jobposting_id": {"$in": ids_int}},
+        {"company_jobposting_id": {"$in": ids_str}},
+    ]}
     return {"$and": [f, job_clause]} if f else job_clause
 
 def _is_allowed(cid: Any, job_id: Any) -> bool:
@@ -282,6 +285,10 @@ def _is_allowed(cid: Any, job_id: Any) -> bool:
         return False
 
     return job_id in (scope.job_ids or set())
+
+def _allowed_match(m: dict) -> bool:
+    meta = (m or {}).get("metadata", {}) or {}
+    return _is_allowed(meta.get("company_id"), meta.get("company_jobposting_id"))
 
 # ---------- Validation ----------
 VALID_RESOURCE_TYPES = {"job", "candidate", "job_activity_event", "candidate_activity_event"}
@@ -339,7 +346,7 @@ def create_server():
 
         Args:
           query: natural language query
-          top_k: number of results to return (after merging)
+          top_k: number of results to return (after merging). Default 100; capped at 100.
           resource_type: optional filter ('job' | 'candidate' | 'job_activity_event' | 'candidate_activity_event')
           company_id: optional company id (routes to namespace 'company_{id}', if allowed)
           company_name: optional company name (matched against server allowlist names; case-insensitive)
@@ -347,11 +354,11 @@ def create_server():
         if not query or not query.strip():
             return {"results": []}
 
-        # Clamp top_k sensibly
+        # Enforce cap at 100 (and minimum 1)
         try:
-            top_k = max(1, min(int(top_k), 200))
+            top_k = max(1, min(int(top_k), 100))
         except Exception:
-            top_k = 20
+            top_k = 100
 
         _validate_resource_type(resource_type)
 
@@ -375,16 +382,22 @@ def create_server():
             if pine_filter is None:
                 # No access to this company (or no jobs)
                 continue
+
+            logger.info("Query ns=%s filter=%s top_k=%s", ns, pine_filter, top_k)
             try:
                 res = await _search_one_namespace(ns, qvec, top_k, pine_filter)
-                logger.info("Query ns=%s filter=%s top_k=%s", ns, pine_filter, top_k)
-                matches = res.get("matches", [])
-                logger.info("ns=%s returned %d matches (pre-merge)", ns, len(matches))
-                all_matches.extend(matches)
             except Exception as e:
                 logger.exception(f"Query failed for namespace '{ns}': {e}")
                 continue
-            all_matches.extend(res.get("matches", []))
+
+            matches = res.get("matches", [])
+            logger.info("ns=%s returned %d matches (pre-merge)", ns, len(matches))
+
+            # Server-side permission filter (belt-and-suspenders)
+            allowed = [m for m in matches if _allowed_match(m)]
+            logger.info("ns=%s allowed after ACL filter: %d", ns, len(allowed))
+
+            all_matches.extend(allowed)
 
         # Merge and trim
         merged = _merge_results(all_matches, top_k)
@@ -424,18 +437,13 @@ def create_server():
             raise ValueError("id is required")
 
         targets = _resolve_company_targets(company_id, company_name)
-
         if not targets:
-            # Fallback: legacy single namespace if configured AND (no server/user allowlist flow)
-            if PINECONE_NAMESPACE_FALLBACK and not ALLOWED_COMPANIES and not ACCESS_PROFILE.companies:
-                targets = [(-1, PINECONE_NAMESPACE_FALLBACK)]
-            else:
-                raise ValueError("No company targets resolved for fetch().")
+            raise ValueError("No company targets resolved for fetch().")
 
         # Try each namespace until a permitted match is found
         for _, ns in targets:
             fetched = await asyncio.to_thread(index.fetch, ids=[id], namespace=ns)
-            vectors = fetched.get("vectors") or {}
+            vectors = fetched.get("vectors") or fetched.get("records") or {}
             item = vectors.get(id)
             if not item:
                 continue
@@ -472,7 +480,7 @@ def main():
 
     # Optional sanity check: dimension matches embed model
     desc = pc.describe_index(PINECONE_INDEX)
-    idx_dim = getattr(desc, "dimension", None) or desc.get("dimension")
+    idx_dim = getattr(desc, "dimension", None) or (desc.get("dimension") if isinstance(desc, dict) else None)
     if idx_dim != INDEX_DIM:
         raise ValueError(
             f"Index dimension {idx_dim} != INDEX_DIM {INDEX_DIM}. "
